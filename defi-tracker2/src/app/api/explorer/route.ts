@@ -74,19 +74,20 @@ async function getBlockscoutStats(apiBase: string, explorerBase: string, address
       // ignore, we may still get data from v1
     }
 
-    // If v2 didn't expose a tx count or first tx, consult legacy v1 txlist
+    // If v2 didn't expose a tx count or first tx, consult legacy v1 txlist.
     if (txCount == null || firstTxDate == null) {
       try {
-        const legacy = await fetchJson(`${api}/api?module=account&action=txlist&address=${address}&page=1&offset=1&sort=asc`, t.signal);
-        const list = Array.isArray(legacy?.result) ? legacy.result : [];
+        // Ask for the full tx list (Blockscout will cap to a sane maximum, usually 10k).
+        const legacy = await fetchJson(`${api}/api?module=account&action=txlist&address=${address}&sort=asc`, t.signal);
+        const list: any[] = Array.isArray(legacy?.result) ? legacy.result : [];
         const first = list[0];
         const ts = first?.timeStamp;
         if (firstTxDate == null && typeof ts === "string") {
           firstTxDate = new Date(Number(ts) * 1000).toISOString().slice(0, 10);
         }
-        // If legacy returned a list at all, we at least know there is ≥1 tx.
-        if (txCount == null && Array.isArray(list)) {
-          txCount = list.length > 0 ? list.length : 0;
+        // If legacy returned a list, use its length as an approximate tx count.
+        if (txCount == null) {
+          txCount = list.length;
         }
       } catch {
         // ignore; we'll keep whatever we have
