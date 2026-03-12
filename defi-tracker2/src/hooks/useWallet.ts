@@ -99,7 +99,7 @@ export function useWallet() {
       ...prev,
       balances: Object.fromEntries(chainKeys.map(k => [k, {
         chainKey: k, chainId: CHAINS[k as keyof typeof CHAINS].id,
-        balance: "0.0000", balanceRaw: 0n,
+        balance: "0.0000", balanceRaw: BigInt(0),
         symbol: CHAINS[k as keyof typeof CHAINS].nativeCurrency.symbol,
         loading: true, error: null,
       }])),
@@ -110,7 +110,7 @@ export function useWallet() {
       const k = chainKeys[i];
       balances[k] = result.status === "fulfilled" ? result.value : {
         chainKey: k, chainId: CHAINS[k as keyof typeof CHAINS].id,
-        balance: "0.0000", balanceRaw: 0n,
+        balance: "0.0000", balanceRaw: BigInt(0),
         symbol: CHAINS[k as keyof typeof CHAINS].nativeCurrency.symbol,
         loading: false, error: "Failed to fetch",
       };
