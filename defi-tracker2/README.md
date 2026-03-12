@@ -1,36 +1,73 @@
-This is a [Next.js](https://nextjs.org/) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
+# defi-tracker-2
 
-## Getting Started
+A lightweight DeFi wallet tracker that connects to an EVM wallet and displays balances across supported chains.
 
-First, run the development server:
+## Features
+
+- **Wallet connect**: Connect via injected wallet providers (e.g., MetaMask).
+- **Multi-chain balances**: Fetch and display native token balances across configured networks.
+- **Chain switching**: Prompt the wallet to switch/add supported chains.
+- **Fast UI**: Built with the Next.js App Router for modern routing and performance.
+
+## Tech stack
+
+- **Next.js 14** (App Router)
+- **React 18**
+- **TypeScript**
+- **ethers v6**
+
+## Getting started
+
+### Prerequisites
+
+- **Node.js**: 18+ recommended (works best with the Next.js 14 toolchain)
+- **npm**: comes with Node.js
+
+### Install
+
+```bash
+npm install
+```
+
+### Run locally
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Then open `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Scripts
 
-This project uses [`next/font`](https://nextjs.org/docs/basic-features/font-optimization) to automatically optimize and load Inter, a custom Google Font.
+```bash
+npm run dev      # start dev server
+npm run build    # production build
+npm run start    # start production server
+npm run lint     # run eslint
+```
 
-## Learn More
+## Configuration
 
-To learn more about Next.js, take a look at the following resources:
+Supported chains (RPC URLs, chain IDs, currency metadata) are defined in:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+- `src/hooks/useWallet.ts` (`CHAINS`)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js/) - your feedback and contributions are welcome!
+If you add new networks, ensure the RPC is reliable and the `nativeCurrency.decimals` value is correct.
 
-## Deploy on Vercel
+## Deployment (Vercel)
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Root Directory**: `defi-tracker2`
+- **Build Command**: `npm run build`
+- **Output**: Next.js default
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/deployment) for more details.
+## Contributing
+
+Issues and PRs are welcome.
+
+- Keep changes focused and small.
+- Prefer typed, readable code.
+- Run `npm run build` before opening a PR.
+
+## License
+
+MIT
