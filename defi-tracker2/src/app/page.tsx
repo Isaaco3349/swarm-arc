@@ -3,6 +3,13 @@
 import { useState, useEffect, useCallback } from "react";
 import { useWalletContext } from "@/context/WalletContext";
 
+type ExplorerStats = {
+  txCount: number | null;
+  firstTxDate: string | null;
+  explorerAddressUrl: string;
+  error?: string | null;
+};
+
 const CHAINS = {
   gravityMainnet:   { id: 1625,    name: "Gravity Alpha",     shortName: "G-L2",  color: "#00ff88", rpc: "https://rpc.gravity.xyz",                   explorer: "https://explorer.gravity.xyz",         bridge: "https://bridge.gravity.xyz",              nativeCurrency: { symbol: "G",    decimals: 18 }, type: "mainnet", stack: "Arbitrum Nitro", logo: "⚡",  note: "L2 · Arbitrum Nitro stack" },
   gravityLongevity: { id: 7771625, name: "Gravity Longevity", shortName: "G-L1",  color: "#00ffcc", rpc: "https://rpc-testnet.gravity.xyz",            explorer: "https://explorer-testnet.gravity.xyz", faucet: "https://faucet.gravity.xyz",              nativeCurrency: { symbol: "G",    decimals: 18 }, type: "testnet", stack: "Gravity L1",    logo: "🔬", note: "L1 Longevity Testnet · ~200ms blocks · no planned resets", tps: "9,500–11,000 TPS" },
@@ -38,6 +45,56 @@ const USD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD",
 const fmtUSD  = (n: number | null) => n == null ? "—" : USD.format(n);
 const shortAddr = (a: string) => `${a.slice(0,6)}...${a.slice(-4)}`;
 const priceOf   = (sym: string) => TICKER_PRICES[sym] ?? 1;
+
+async function fetchJson(url: string, signal?: AbortSignal) {
+  const res = await fetch(url, { signal });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return await res.json();
+}
+
+async function getBlockscoutStats(apiBase: string, explorerBase: string, address: string, signal?: AbortSignal): Promise<ExplorerStats> {
+  const explorerAddressUrl = `${explorerBase.replace(/\/$/,"")}/address/${address}`;
+  try {
+    // Blockscout API v2 (preferred)
+    const addr = await fetchJson(`${apiBase.replace(/\/$/,"")}/api/v2/addresses/${address}`, signal);
+    const txCount =
+      typeof addr?.transactions_count === "number" ? addr.transactions_count :
+      typeof addr?.transaction_count === "number" ? addr.transaction_count :
+      typeof addr?.tx_count === "number" ? addr.tx_count :
+      null;
+
+    let firstTxDate: string | null = null;
+    try {
+      const txs = await fetchJson(`${apiBase.replace(/\/$/,"")}/api/v2/addresses/${address}/transactions?sort=asc&items_count=1`, signal);
+      const item = Array.isArray(txs?.items) ? txs.items[0] : null;
+      const ts = item?.timestamp ?? item?.block_timestamp ?? item?.timeStamp;
+      if (typeof ts === "string") {
+        const d = new Date(ts);
+        firstTxDate = isNaN(d.getTime()) ? null : d.toISOString().slice(0,10);
+      } else if (typeof ts === "number") {
+        const d = new Date(ts * 1000);
+        firstTxDate = isNaN(d.getTime()) ? null : d.toISOString().slice(0,10);
+      }
+    } catch {
+      // ok — we'll fall back below if needed
+    }
+
+    return { txCount, firstTxDate, explorerAddressUrl, error: null };
+  } catch {
+    // Fallback: Blockscout legacy API for first tx date only
+    try {
+      const legacy = await fetchJson(`${apiBase.replace(/\/$/,"")}/api?module=account&action=txlist&address=${address}&page=1&offset=1&sort=asc`, signal);
+      const first = Array.isArray(legacy?.result) ? legacy.result[0] : null;
+      const ts = first?.timeStamp;
+      const firstTxDate =
+        typeof ts === "string" ? new Date(Number(ts) * 1000).toISOString().slice(0,10) :
+        null;
+      return { txCount: null, firstTxDate, explorerAddressUrl, error: null };
+    } catch (err) {
+      return { txCount: null, firstTxDate: null, explorerAddressUrl, error: err instanceof Error ? err.message : "Fetch failed" };
+    }
+  }
+}
 
 function TickerBar() {
   const [offset, setOffset] = useState(0);
@@ -217,6 +274,8 @@ export default function DeFiDashboard() {
   const [filterProtocol, setFilterProtocol] = useState("all");
   const [lastRefresh,    setLastRefresh]    = useState<Date|null>(null);
   const [currentTime, setCurrentTime] = useState<Date | null>(null);
+  const [explorerStats, setExplorerStats] = useState<Record<string, ExplorerStats>>({});
+  const [explorerLoading, setExplorerLoading] = useState(false);
 
   useEffect(()=>{ const id=setInterval(()=>setCurrentTime(new Date()),1000); return()=>clearInterval(id); },[]);
 
@@ -224,6 +283,43 @@ export default function DeFiDashboard() {
     if(connected){ setPositions(generateMockPositions()); setLastRefresh(new Date()); }
     else { setPositions([]); }
   },[connected]);
+
+  useEffect(() => {
+    if (!connected || !address) {
+      setExplorerStats({});
+      setExplorerLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    const CHAINS_FOR_EXPLORER: Array<{ key: string; label: string; apiBase: string; explorerBase: string }> = [
+      { key: "gravityMainnet",   label: "Gravity",   apiBase: "https://explorer.gravity.xyz",                     explorerBase: "https://explorer.gravity.xyz" },
+      { key: "tempoTestnet",     label: "Tempo",     apiBase: "https://scout.tempo.xyz",                         explorerBase: "https://scout.tempo.xyz" },
+      { key: "arcTestnet",       label: "Arc",       apiBase: "https://testnet.arcscan.app",                     explorerBase: "https://testnet.arcscan.app" },
+      { key: "giwaTestnet",      label: "GIWA",      apiBase: "https://sepolia-explorer.giwa.io",                explorerBase: "https://sepolia-explorer.giwa.io" },
+      { key: "robinhoodTestnet", label: "Robinhood", apiBase: "https://explorer.testnet.chain.robinhood.com",    explorerBase: "https://explorer.testnet.chain.robinhood.com" },
+    ];
+    setExplorerLoading(true);
+    Promise.allSettled(
+      CHAINS_FOR_EXPLORER.map(async (c) => {
+        const stats = await getBlockscoutStats(c.apiBase, c.explorerBase, address, controller.signal);
+        return [c.key, stats] as const;
+      })
+    ).then((results) => {
+      if (controller.signal.aborted) return;
+      const next: Record<string, ExplorerStats> = {};
+      results.forEach((r) => {
+        if (r.status === "fulfilled") {
+          const [k, v] = r.value;
+          next[k] = v;
+        }
+      });
+      setExplorerStats(next);
+      setExplorerLoading(false);
+    }).catch(() => {
+      if (!controller.signal.aborted) setExplorerLoading(false);
+    });
+    return () => controller.abort();
+  }, [connected, address]);
 
   const handleRefresh = useCallback(async()=>{
     if(!connected) return;
@@ -244,7 +340,7 @@ export default function DeFiDashboard() {
     b.chainKey === "tempoTestnet" ? sum : sum + (parseFloat(b.balance)||0) * (PRICES[b.symbol] ?? 0)
   ),0);
   const filtered = positions.filter(p=>(filterChain==="all"||p.chain===filterChain)&&(filterProtocol==="all"||p.protocol===filterProtocol));
-  const TABS = [{id:"positions",label:"POSITIONS"},{id:"balances",label:"BALANCES"},{id:"protocols",label:"PROTOCOLS"},{id:"chains",label:"CHAIN MAP"}];
+  const TABS = [{id:"positions",label:"POSITIONS"},{id:"balances",label:"BALANCES"},{id:"explorer",label:"EXPLORER"},{id:"protocols",label:"PROTOCOLS"},{id:"chains",label:"CHAIN MAP"}];
   const headerChains = ["gravityMainnet","tempoTestnet","arcTestnet","giwaTestnet","robinhoodTestnet"];
 
   return (
@@ -362,6 +458,55 @@ export default function DeFiDashboard() {
               {Object.keys(CHAINS).map(k=><ChainBalanceRow key={k} chainKey={k}/>)}
               <div style={{padding:"8px 16px",borderTop:"1px solid #0d1a0d",background:"#050d05",fontFamily:"'Courier New',monospace",fontSize:9,color:"#2a4a2a"}}>
                 ⓘ Protocol positions appear in POSITIONS tab once contract addresses are added
+              </div>
+            </div>
+          )}
+
+          {/* EXPLORER */}
+          {activeTab==="explorer"&&(
+            <div style={{border:"1px solid #1a2a1a",borderTop:"none"}}>
+              <div style={{padding:"8px 16px",background:"#050d05",borderBottom:"1px solid #0d1a0d",fontFamily:"'Courier New',monospace",fontSize:9,color:"#2a4a2a",letterSpacing:2,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span>BLOCKSCOUT EXPLORER · WALLET ACTIVITY BY CHAIN</span>
+                <span style={{color:explorerLoading?"#f59e0b":"#446644"}}>{!connected?"DISCONNECTED":explorerLoading?"LOADING...":"READY"}</span>
+              </div>
+
+              {[
+                { key: "gravityMainnet",   name: "Gravity",   explorerBase: "https://explorer.gravity.xyz" },
+                { key: "tempoTestnet",     name: "Tempo",     explorerBase: "https://scout.tempo.xyz" },
+                { key: "arcTestnet",       name: "Arc",       explorerBase: "https://testnet.arcscan.app" },
+                { key: "giwaTestnet",      name: "GIWA",      explorerBase: "https://sepolia-explorer.giwa.io" },
+                { key: "robinhoodTestnet", name: "Robinhood", explorerBase: "https://explorer.testnet.chain.robinhood.com" },
+              ].map((c) => {
+                const s = explorerStats[c.key];
+                const url = s?.explorerAddressUrl ?? (address ? `${c.explorerBase.replace(/\/$/,"")}/address/${address}` : c.explorerBase);
+                const txCount = s?.txCount == null ? "N/A" : s.txCount.toLocaleString("en-US");
+                const first = s?.firstTxDate ?? "N/A";
+                return (
+                  <div key={c.key} style={{display:"grid",gridTemplateColumns:"160px 1fr 1fr 180px",gap:12,alignItems:"center",padding:"10px 16px",borderBottom:"1px solid #0d1a0d"}}
+                    onMouseEnter={e=>(e.currentTarget.style.background="#0a160a")} onMouseLeave={e=>(e.currentTarget.style.background="transparent")}>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <ChainBadge chainKey={c.key} small/>
+                      <span style={{fontSize:10,color:"#446644",letterSpacing:1}}>{c.name}</span>
+                    </div>
+                    <div style={{fontSize:10,color:"#c8e6c8"}}>
+                      <span style={{color:"#446644",marginRight:8}}>TX COUNT</span>
+                      <span style={{fontWeight:700}}>{txCount}</span>
+                    </div>
+                    <div style={{fontSize:10,color:"#c8e6c8"}}>
+                      <span style={{color:"#446644",marginRight:8}}>FIRST TX</span>
+                      <span style={{fontWeight:700}}>{first}</span>
+                    </div>
+                    <div style={{textAlign:"right"}}>
+                      <a href={url} target="_blank" rel="noreferrer" style={{fontSize:10,color:"#00ff88",textDecoration:"none",letterSpacing:1,opacity:0.85}}>
+                        ↗ VIEW ON EXPLORER
+                      </a>
+                    </div>
+                  </div>
+                );
+              })}
+
+              <div style={{padding:"8px 16px",borderTop:"1px solid #0d1a0d",background:"#050d05",fontFamily:"'Courier New',monospace",fontSize:9,color:"#2a4a2a"}}>
+                ⓘ Shows <span style={{color:"#446644"}}>N/A</span> if a chain explorer API does not return data.
               </div>
             </div>
           )}
