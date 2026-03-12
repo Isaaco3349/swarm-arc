@@ -34,7 +34,7 @@ const CHAINS = {
   gravityLongevity: { id: 7771625, rpc: "https://rpc-testnet.gravity.xyz",            nativeCurrency: { symbol: "G",    decimals: 18 } },
   gravitySepolia:   { id: 13505,   rpc: "https://rpc-sepolia.gravity.xyz",            nativeCurrency: { symbol: "G",    decimals: 18 } },
   tempoTestnet:     { id: 42431,   rpc: "https://rpc.moderato.tempo.xyz",             nativeCurrency: { symbol: "USD",  decimals: 18 } },
-  arcTestnet:       { id: 5042002, rpc: "https://rpc.testnet.arc.network",            nativeCurrency: { symbol: "USDC", decimals: 6  } },
+  arcTestnet:       { id: 5042002, rpc: "https://rpc.testnet.arc.network",            nativeCurrency: { symbol: "USDC", decimals: 18 } },
   giwaTestnet:      { id: 91342,   rpc: "https://sepolia-rpc.giwa.io",                nativeCurrency: { symbol: "ETH",  decimals: 18 } },
   robinhoodTestnet: { id: 46630,   rpc: "https://rpc.testnet.chain.robinhood.com",    nativeCurrency: { symbol: "ETH",  decimals: 18 } },
   arbitrum:         { id: 42161,   rpc: "https://arb1.arbitrum.io/rpc",               nativeCurrency: { symbol: "ETH",  decimals: 18 } },
