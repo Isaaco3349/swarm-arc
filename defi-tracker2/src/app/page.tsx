@@ -231,7 +231,10 @@ export default function DeFiDashboard() {
   const totalEarned    = positions.filter(p=>p.earned>0).reduce((s,p)=>s+p.earned*priceOf(p.asset.split("/")[0]),0);
   const avgAPY         = positions.length>0 ? positions.reduce((s,p)=>s+p.apy,0)/positions.length : 0;
   const PRICES: Record<string,number> = {G:0.42,ETH:3240,USDC:1,USD:1};
-  const nativeUSD = Object.values(balances).reduce((sum,b)=>sum+(parseFloat(b.balance)||0)*(PRICES[b.symbol]??0),0);
+  // Tempo has no meaningful native gas balance; exclude it from the "Native Balance" USD total.
+  const nativeUSD = Object.values(balances).reduce((sum,b)=>(
+    b.chainKey === "tempoTestnet" ? sum : sum + (parseFloat(b.balance)||0) * (PRICES[b.symbol] ?? 0)
+  ),0);
   const filtered = positions.filter(p=>(filterChain==="all"||p.chain===filterChain)&&(filterProtocol==="all"||p.protocol===filterProtocol));
   const TABS = [{id:"positions",label:"POSITIONS"},{id:"balances",label:"BALANCES"},{id:"protocols",label:"PROTOCOLS"},{id:"chains",label:"CHAIN MAP"}];
   const headerChains = ["gravityMainnet","tempoTestnet","arcTestnet","giwaTestnet","robinhoodTestnet"];

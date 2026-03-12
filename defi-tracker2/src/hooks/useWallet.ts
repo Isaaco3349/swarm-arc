@@ -15,6 +15,7 @@ export interface ChainBalance {
   chainId: number;
   balance: string;
   balanceRaw: bigint;
+  decimals: number;
   symbol: string;
   loading: boolean;
   error: string | null;
@@ -66,6 +67,14 @@ function buildAddChainParams(chainKey: string, fullChains: any) {
   };
 }
 
+function formatUnitsFixed(raw: bigint, decimals: number, fractionDigits = 4) {
+  // Avoid converting to Number (prevents scientific notation / precision loss).
+  const s = ethers.formatUnits(raw, decimals);
+  const [intPart, fracPart = ""] = s.split(".");
+  const frac = fracPart.padEnd(fractionDigits, "0").slice(0, fractionDigits);
+  return fractionDigits > 0 ? `${intPart}.${frac}` : intPart;
+}
+
 export function useWallet() {
   const [state, setState] = useState<WalletState>({
     status: "disconnected",
@@ -78,15 +87,16 @@ export function useWallet() {
 
   const fetchBalance = useCallback(async (address: string, chainKey: string): Promise<ChainBalance> => {
     const chain = CHAINS[chainKey as keyof typeof CHAINS];
+    const decimals = chain.nativeCurrency.decimals;
     const base: ChainBalance = {
       chainKey, chainId: chain.id, balance: "0.0000",
-      balanceRaw: BigInt(0), symbol: chain.nativeCurrency.symbol,
+      balanceRaw: BigInt(0), decimals, symbol: chain.nativeCurrency.symbol,
       loading: true, error: null,
     };
     try {
       const provider = new ethers.JsonRpcProvider(chain.rpc);
       const raw = await provider.getBalance(address);
-      const formatted = parseFloat(ethers.formatUnits(raw, chain.nativeCurrency.decimals)).toFixed(4);
+      const formatted = formatUnitsFixed(raw, decimals, 4);
       return { ...base, balance: formatted, balanceRaw: raw, loading: false };
     } catch (err) {
       return { ...base, loading: false, error: err instanceof Error ? err.message : "RPC error" };
@@ -99,7 +109,7 @@ export function useWallet() {
       ...prev,
       balances: Object.fromEntries(chainKeys.map(k => [k, {
         chainKey: k, chainId: CHAINS[k as keyof typeof CHAINS].id,
-        balance: "0.0000", balanceRaw: BigInt(0),
+        balance: "0.0000", balanceRaw: BigInt(0), decimals: CHAINS[k as keyof typeof CHAINS].nativeCurrency.decimals,
         symbol: CHAINS[k as keyof typeof CHAINS].nativeCurrency.symbol,
         loading: true, error: null,
       }])),
@@ -110,7 +120,7 @@ export function useWallet() {
       const k = chainKeys[i];
       balances[k] = result.status === "fulfilled" ? result.value : {
         chainKey: k, chainId: CHAINS[k as keyof typeof CHAINS].id,
-        balance: "0.0000", balanceRaw: BigInt(0),
+        balance: "0.0000", balanceRaw: BigInt(0), decimals: CHAINS[k as keyof typeof CHAINS].nativeCurrency.decimals,
         symbol: CHAINS[k as keyof typeof CHAINS].nativeCurrency.symbol,
         loading: false, error: "Failed to fetch",
       };
