@@ -29,9 +29,16 @@ function withTimeout(ms: number) {
 }
 
 async function fetchJson(url: string, signal?: AbortSignal) {
+  console.log("[explorer] fetchJson url:", url);
   const res = await fetch(url, { signal, cache: "no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json();
+  const text = await res.text();
+  console.log("[explorer] raw response:", text);
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text as any;
+  }
 }
 
 async function getBlockscoutStats(apiBase: string, explorerBase: string, address: string): Promise<ExplorerStats> {
@@ -43,13 +50,15 @@ async function getBlockscoutStats(apiBase: string, explorerBase: string, address
   try {
     // Blockscout API v2 (preferred)
     const addr = await fetchJson(`${api}/api/v2/addresses/${address}`, t.signal);
-    const txCount =
+    let txCount: number | null =
       typeof addr?.transactions_count === "number" ? addr.transactions_count :
       typeof addr?.transaction_count === "number" ? addr.transaction_count :
       typeof addr?.tx_count === "number" ? addr.tx_count :
       null;
 
     let firstTxDate: string | null = null;
+
+    // Try v2 transactions list for first tx
     try {
       const txs = await fetchJson(`${api}/api/v2/addresses/${address}/transactions?sort=asc&items_count=1`, t.signal);
       const item = Array.isArray(txs?.items) ? txs.items[0] : null;
@@ -62,22 +71,32 @@ async function getBlockscoutStats(apiBase: string, explorerBase: string, address
         firstTxDate = isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
       }
     } catch {
-      // ok
+      // ignore, we may still get data from v1
+    }
+
+    // If v2 didn't expose a tx count or first tx, consult legacy v1 txlist
+    if (txCount == null || firstTxDate == null) {
+      try {
+        const legacy = await fetchJson(`${api}/api?module=account&action=txlist&address=${address}&page=1&offset=1&sort=asc`, t.signal);
+        const list = Array.isArray(legacy?.result) ? legacy.result : [];
+        const first = list[0];
+        const ts = first?.timeStamp;
+        if (firstTxDate == null && typeof ts === "string") {
+          firstTxDate = new Date(Number(ts) * 1000).toISOString().slice(0, 10);
+        }
+        // If legacy returned a list at all, we at least know there is ≥1 tx.
+        if (txCount == null && Array.isArray(list)) {
+          txCount = list.length > 0 ? list.length : 0;
+        }
+      } catch {
+        // ignore; we'll keep whatever we have
+      }
     }
 
     return { txCount, firstTxDate, explorerAddressUrl, error: null };
-  } catch {
-    // Fallback: legacy API (first tx only)
-    try {
-      const legacy = await fetchJson(`${api}/api?module=account&action=txlist&address=${address}&page=1&offset=1&sort=asc`, t.signal);
-      const first = Array.isArray(legacy?.result) ? legacy.result[0] : null;
-      const ts = first?.timeStamp;
-      const firstTxDate =
-        typeof ts === "string" ? new Date(Number(ts) * 1000).toISOString().slice(0, 10) : null;
-      return { txCount: null, firstTxDate, explorerAddressUrl, error: null };
-    } catch (err) {
-      return { txCount: null, firstTxDate: null, explorerAddressUrl, error: err instanceof Error ? err.message : "Fetch failed" };
-    }
+  } catch (err) {
+    // Complete failure for this chain: return N/A but keep a link + error message
+    return { txCount: null, firstTxDate: null, explorerAddressUrl, error: err instanceof Error ? err.message : "Fetch failed" };
   } finally {
     t.clear();
   }
