@@ -12,7 +12,8 @@ type ExplorerStats = {
 
 const CHAINS_FOR_EXPLORER: Array<{ key: string; apiBase: string; explorerBase: string }> = [
   { key: "gravityMainnet",   apiBase: "https://explorer-testnet.gravity.xyz",          explorerBase: "https://explorer-testnet.gravity.xyz" },
-  { key: "tempoTestnet",     apiBase: "https://scout.tempo.xyz",                      explorerBase: "https://scout.tempo.xyz" },
+  // Tempo uses a custom explorer; compute tx count from RPC instead of Blockscout.
+  { key: "tempoTestnet",     apiBase: "https://rpc.moderato.tempo.xyz",               explorerBase: "https://explore.tempo.xyz" },
   { key: "arcTestnet",       apiBase: "https://testnet.arcscan.app",                  explorerBase: "https://testnet.arcscan.app" },
   { key: "giwaTestnet",      apiBase: "https://sepolia-explorer.giwa.io",             explorerBase: "https://sepolia-explorer.giwa.io" },
   { key: "robinhoodTestnet", apiBase: "https://explorer.testnet.chain.robinhood.com", explorerBase: "https://explorer.testnet.chain.robinhood.com" },
@@ -38,6 +39,36 @@ async function fetchJson(url: string, signal?: AbortSignal) {
     return JSON.parse(text);
   } catch {
     return text as any;
+  }
+}
+
+async function getTempoRpcStats(rpcUrl: string, explorerBase: string, address: string): Promise<ExplorerStats> {
+  const explorerAddressUrl = `${explorerBase.replace(/\/$/, "")}/${address}`;
+  const t = withTimeout(8000);
+  try {
+    const body = {
+      jsonrpc: "2.0",
+      id: 1,
+      method: "eth_getTransactionCount",
+      params: [address, "latest"],
+    };
+    console.log("[explorer] tempo rpc:", rpcUrl);
+    const res = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: t.signal,
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const hex = json?.result;
+    const txCount = typeof hex === "string" ? parseInt(hex, 16) : null;
+    return { txCount: Number.isFinite(txCount) ? txCount : null, firstTxDate: null, explorerAddressUrl, error: null };
+  } catch (err) {
+    return { txCount: null, firstTxDate: null, explorerAddressUrl, error: err instanceof Error ? err.message : "Fetch failed" };
+  } finally {
+    t.clear();
   }
 }
 
@@ -111,7 +142,10 @@ export async function GET(req: NextRequest) {
 
   const results = await Promise.allSettled(
     CHAINS_FOR_EXPLORER.map(async (c) => {
-      const stats = await getBlockscoutStats(c.apiBase, c.explorerBase, address);
+      const stats =
+        c.key === "tempoTestnet"
+          ? await getTempoRpcStats(c.apiBase, c.explorerBase, address)
+          : await getBlockscoutStats(c.apiBase, c.explorerBase, address);
       return [c.key, stats] as const;
     })
   );
