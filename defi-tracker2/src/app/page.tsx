@@ -178,6 +178,12 @@ function ChainBalanceRow({ chainKey }: { chainKey: string }) {
   const chain = CHAINS[chainKey as keyof typeof CHAINS];
   const bal   = balances[chainKey];
   if (!chain) return null;
+  const isTempo = chainKey === "tempoTestnet";
+  const displayValue =
+    isTempo ? "N/A" :
+    bal?.loading ? "···" :
+    bal?.error ? "ERR" :
+    (bal?.balance ?? "0.0000");
   return (
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 16px",borderBottom:"1px solid #0d1a0d",transition:"background 0.15s"}}
       onMouseEnter={e=>(e.currentTarget.style.background="#0a160a")} onMouseLeave={e=>(e.currentTarget.style.background="transparent")}>
@@ -187,10 +193,12 @@ function ChainBalanceRow({ chainKey }: { chainKey: string }) {
       </div>
       <div style={{textAlign:"right"}}>
         <span style={{fontFamily:"'Courier New',monospace",fontSize:15,fontWeight:700,color:bal?.loading?"#2a4a2a":bal?.error?"#ff445566":"#c8e6c8"}}>
-          {bal?.loading?"···":bal?.error?"ERR":bal?.balance??"0.0000"}
+          {displayValue}
         </span>
-        <span style={{fontFamily:"'Courier New',monospace",fontSize:9,color:"#446644",marginLeft:6}}>{chain.nativeCurrency.symbol}</span>
-        {bal?.error&&<span style={{fontFamily:"'Courier New',monospace",fontSize:8,color:"#ff445566",marginLeft:8}}>⚠ RPC</span>}
+        {!isTempo && (
+          <span style={{fontFamily:"'Courier New',monospace",fontSize:9,color:"#446644",marginLeft:6}}>{chain.nativeCurrency.symbol}</span>
+        )}
+        {!isTempo && bal?.error && <span style={{fontFamily:"'Courier New',monospace",fontSize:8,color:"#ff445566",marginLeft:8}}>⚠ RPC</span>}
       </div>
     </div>
   );
