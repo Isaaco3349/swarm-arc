@@ -11,7 +11,7 @@ type ExplorerStats = {
 };
 
 const CHAINS_FOR_EXPLORER: Array<{ key: string; apiBase: string; explorerBase: string }> = [
-  { key: "gravityMainnet",   apiBase: "https://explorer.gravity.xyz",                  explorerBase: "https://explorer.gravity.xyz" },
+  { key: "gravityMainnet",   apiBase: "https://explorer-testnet.gravity.xyz",          explorerBase: "https://explorer-testnet.gravity.xyz" },
   { key: "tempoTestnet",     apiBase: "https://scout.tempo.xyz",                      explorerBase: "https://scout.tempo.xyz" },
   { key: "arcTestnet",       apiBase: "https://testnet.arcscan.app",                  explorerBase: "https://testnet.arcscan.app" },
   { key: "giwaTestnet",      apiBase: "https://sepolia-explorer.giwa.io",             explorerBase: "https://sepolia-explorer.giwa.io" },

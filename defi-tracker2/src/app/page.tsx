@@ -11,10 +11,10 @@ type ExplorerStats = {
 };
 
 const CHAINS = {
-  gravityMainnet:   { id: 1625,    name: "Gravity Alpha",     shortName: "G-L2",  color: "#00ff88", rpc: "https://rpc.gravity.xyz",                   explorer: "https://explorer.gravity.xyz",         bridge: "https://bridge.gravity.xyz",              nativeCurrency: { symbol: "G",    decimals: 18 }, type: "mainnet", stack: "Arbitrum Nitro", logo: "⚡",  note: "L2 · Arbitrum Nitro stack" },
-  gravityLongevity: { id: 7771625, name: "Gravity Longevity", shortName: "G-L1",  color: "#00ffcc", rpc: "https://rpc-testnet.gravity.xyz",            explorer: "https://explorer-testnet.gravity.xyz", faucet: "https://faucet.gravity.xyz",              nativeCurrency: { symbol: "G",    decimals: 18 }, type: "testnet", stack: "Gravity L1",    logo: "🔬", note: "L1 Longevity Testnet · ~200ms blocks · no planned resets", tps: "9,500–11,000 TPS" },
+  // Gravity Longevity L1 Testnet (replaces old Gravity mainnet entry)
+  gravityMainnet:   { id: 7771625, name: "Gravity Longevity", shortName: "G-L1",  color: "#00ffcc", rpc: "https://rpc-testnet.gravity.xyz",            explorer: "https://explorer-testnet.gravity.xyz", faucet: "https://faucet.gravity.xyz",              nativeCurrency: { symbol: "G",    decimals: 18 }, type: "testnet", stack: "Gravity L1",    logo: "🔬", note: "L1 Longevity Testnet · ~200ms blocks · no planned resets", tps: "9,500–11,000 TPS" },
   gravitySepolia:   { id: 13505,   name: "Gravity Sepolia",   shortName: "G-SEP", color: "#00cc88", rpc: "https://rpc-sepolia.gravity.xyz",            explorer: "https://explorer-sepolia.gravity.xyz", bridge: "https://bridge-sepolia.gravity.xyz",      nativeCurrency: { symbol: "G",    decimals: 18 }, type: "testnet", stack: "Arbitrum Nitro", logo: "🧪", note: "L2 Sepolia Testnet · Celestia DA" },
-  tempoTestnet:     { id: 42431,   name: "Tempo Moderato",    shortName: "TEMPO", color: "#ff6b35", rpc: "https://rpc.moderato.tempo.xyz",             explorer: "https://explore.tempo.xyz",            faucet: "https://docs.tempo.xyz/quickstart/faucet", nativeCurrency: { symbol: "USD",  decimals: 18 }, type: "testnet", stack: "Tempo L1",      logo: "💳", note: "Payments L1 · no native gas · fees in TIP-20 stablecoins" },
+  tempoTestnet:     { id: 42431,   name: "Tempo Moderato",    shortName: "TEMPO", color: "#ff6b35", rpc: "https://rpc.moderato.tempo.xyz",             explorer: "https://scout.tempo.xyz",              faucet: "https://docs.tempo.xyz/quickstart/faucet", nativeCurrency: { symbol: "USD",  decimals: 18 }, type: "testnet", stack: "Tempo L1",      logo: "💳", note: "Payments L1 · no native gas · fees in TIP-20 stablecoins" },
   arcTestnet:       { id: 5042002, name: "Arc Testnet",       shortName: "ARC",   color: "#f59e0b", rpc: "https://rpc.testnet.arc.network",            explorer: "https://testnet.arcscan.app",          faucet: "https://faucet.circle.com",               nativeCurrency: { symbol: "USDC", decimals: 18 }, type: "testnet", stack: "Arc L1",        logo: "🏛️", note: "Circle-backed L1 · USDC as native gas · deterministic finality" },
   giwaTestnet:      { id: 91342,   name: "GIWA Sepolia",      shortName: "GIWA",  color: "#ec4899", rpc: "https://sepolia-rpc.giwa.io",                explorer: "https://sepolia-explorer.giwa.io",     faucet: "https://faucet.giwa.io",                  nativeCurrency: { symbol: "ETH",  decimals: 18 }, type: "testnet", stack: "OP Stack L2",   logo: "🏯", note: "Upbit-backed OP Stack L2 · 1s blocks · mainnet TBD" },
   robinhoodTestnet: { id: 46630,   name: "Robinhood Testnet", shortName: "RH",    color: "#00c805", rpc: "https://rpc.testnet.chain.robinhood.com",    explorer: "https://explorer.testnet.chain.robinhood.com", nativeCurrency: { symbol: "ETH",  decimals: 18 }, type: "testnet", stack: "Arbitrum L2",   logo: "🪶", note: "Robinhood Chain · Arbitrum L2 · ETH gas" },
@@ -22,7 +22,7 @@ const CHAINS = {
 };
 
 const PROTOCOLS = {
-  longevity: { name: "Longevity", tag: "GRAVITY",  color: "#00ffcc", chains: ["gravityLongevity","gravityMainnet"], type: "Gravity L1 Testnet",                   status: "testnet", docsUrl: "https://docs.gravity.xyz/network/l1-longevity-testnet", faucet: "https://faucet.gravity.xyz" },
+  longevity: { name: "Longevity", tag: "GRAVITY",  color: "#00ffcc", chains: ["gravityMainnet"], type: "Gravity L1 Testnet",                   status: "testnet", docsUrl: "https://docs.gravity.xyz/network/l1-longevity-testnet", faucet: "https://faucet.gravity.xyz" },
   tempo:     { name: "Tempo",     tag: "TEMPO",    color: "#ff6b35", chains: ["tempoTestnet"],                      type: "Payments L1 · TIP-20 stablecoins",     status: "testnet", docsUrl: "https://docs.tempo.xyz",   faucet: "https://docs.tempo.xyz/quickstart/faucet" },
   arc:       { name: "Arc",       tag: "ARC",      color: "#f59e0b", chains: ["arcTestnet"],                        type: "Circle L1 · USDC gas",                 status: "testnet", docsUrl: "https://docs.arc.network", faucet: "https://faucet.circle.com" },
   giwa:      { name: "Giwa",      tag: "GIWA",     color: "#ec4899", chains: ["giwaTestnet"],                       type: "Upbit OP Stack L2 · 1s blocks",        status: "testnet", docsUrl: "https://docs.giwa.io",     faucet: "https://faucet.giwa.io" },
@@ -30,8 +30,8 @@ const PROTOCOLS = {
 };
 
 const generateMockPositions = () => [
-  { id: "longevity-g-l1",   protocol: "longevity", chain: "gravityLongevity", type: "Staking", asset: "G",        deposited: 12500, earned: 234.56, apy: 18.4, healthFactor: null, status: "testnet" },
-  { id: "longevity-g-l2",   protocol: "longevity", chain: "gravityMainnet",   type: "Staking", asset: "G",        deposited:  5000, earned:  87.20, apy: 16.1, healthFactor: null, status: "active"  },
+  { id: "longevity-g-l1",   protocol: "longevity", chain: "gravityMainnet", type: "Staking", asset: "G",        deposited: 12500, earned: 234.56, apy: 18.4, healthFactor: null, status: "testnet" },
+  { id: "longevity-g-l2",   protocol: "longevity", chain: "gravitySepolia", type: "Staking", asset: "G",        deposited:  5000, earned:  87.20, apy: 16.1, healthFactor: null, status: "testnet"  },
   { id: "tempo-supply",     protocol: "tempo",     chain: "tempoTestnet",     type: "Supply",  asset: "pathUSD",  deposited:  5000, earned:  47.23, apy:  8.2, healthFactor: null, status: "testnet" },
   { id: "tempo-borrow",     protocol: "tempo",     chain: "tempoTestnet",     type: "Borrow",  asset: "AlphaUSD", deposited: -2000, earned: -12.40, apy:  3.1, healthFactor: 2.34, status: "testnet" },
   { id: "arc-lp",           protocol: "arc",       chain: "arcTestnet",       type: "LP",      asset: "USDC",     deposited:  3200, earned:  89.10, apy: 24.6, healthFactor: null, status: "testnet" },

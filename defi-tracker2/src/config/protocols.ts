@@ -1,11 +1,10 @@
 export const PROTOCOLS = {
     longevity: {
       name: "Longevity", tag: "GRAVITY", color: "#00ffcc",
-      chains: ["gravityLongevity", "gravityMainnet"],
+      chains: ["gravityMainnet"],
       type: "Gravity L1 Testnet",
       description: "Gravity's long-running L1 testnet. ~200ms block time, 9,500–11,000 TPS.",
       contracts: {
-        gravityLongevity: { staking: "", vault: "" },
         gravityMainnet:   { staking: "", vault: "" },
       },
       status: "testnet",

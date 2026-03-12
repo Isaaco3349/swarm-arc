@@ -31,8 +31,8 @@ export interface WalletState {
 }
 
 const CHAINS = {
-  gravityMainnet:   { id: 1625,    rpc: "https://rpc.gravity.xyz",                   nativeCurrency: { symbol: "G",    decimals: 18 } },
-  gravityLongevity: { id: 7771625, rpc: "https://rpc-testnet.gravity.xyz",            nativeCurrency: { symbol: "G",    decimals: 18 } },
+  // Gravity Longevity L1 Testnet (replaces old Gravity mainnet entry)
+  gravityMainnet:   { id: 7771625, rpc: "https://rpc-testnet.gravity.xyz",            nativeCurrency: { symbol: "G",    decimals: 18 } },
   gravitySepolia:   { id: 13505,   rpc: "https://rpc-sepolia.gravity.xyz",            nativeCurrency: { symbol: "G",    decimals: 18 } },
   tempoTestnet:     { id: 42431,   rpc: "https://rpc.moderato.tempo.xyz",             nativeCurrency: { symbol: "USD",  decimals: 18 } },
   arcTestnet:       { id: 5042002, rpc: "https://rpc.testnet.arc.network",            nativeCurrency: { symbol: "USDC", decimals: 18 } },
