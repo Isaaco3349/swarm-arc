@@ -80,7 +80,7 @@ export function useWallet() {
     const chain = CHAINS[chainKey as keyof typeof CHAINS];
     const base: ChainBalance = {
       chainKey, chainId: chain.id, balance: "0.0000",
-      balanceRaw: 0n, symbol: chain.nativeCurrency.symbol,
+      balanceRaw: BigInt(0), symbol: chain.nativeCurrency.symbol,
       loading: true, error: null,
     };
     try {
