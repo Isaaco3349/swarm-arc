@@ -46,54 +46,11 @@ const fmtUSD  = (n: number | null) => n == null ? "—" : USD.format(n);
 const shortAddr = (a: string) => `${a.slice(0,6)}...${a.slice(-4)}`;
 const priceOf   = (sym: string) => TICKER_PRICES[sym] ?? 1;
 
-async function fetchJson(url: string, signal?: AbortSignal) {
-  const res = await fetch(url, { signal });
+async function fetchExplorerStats(address: string, signal?: AbortSignal) {
+  const res = await fetch(`/api/explorer?address=${encodeURIComponent(address)}`, { signal, cache: "no-store" });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return await res.json();
-}
-
-async function getBlockscoutStats(apiBase: string, explorerBase: string, address: string, signal?: AbortSignal): Promise<ExplorerStats> {
-  const explorerAddressUrl = `${explorerBase.replace(/\/$/,"")}/address/${address}`;
-  try {
-    // Blockscout API v2 (preferred)
-    const addr = await fetchJson(`${apiBase.replace(/\/$/,"")}/api/v2/addresses/${address}`, signal);
-    const txCount =
-      typeof addr?.transactions_count === "number" ? addr.transactions_count :
-      typeof addr?.transaction_count === "number" ? addr.transaction_count :
-      typeof addr?.tx_count === "number" ? addr.tx_count :
-      null;
-
-    let firstTxDate: string | null = null;
-    try {
-      const txs = await fetchJson(`${apiBase.replace(/\/$/,"")}/api/v2/addresses/${address}/transactions?sort=asc&items_count=1`, signal);
-      const item = Array.isArray(txs?.items) ? txs.items[0] : null;
-      const ts = item?.timestamp ?? item?.block_timestamp ?? item?.timeStamp;
-      if (typeof ts === "string") {
-        const d = new Date(ts);
-        firstTxDate = isNaN(d.getTime()) ? null : d.toISOString().slice(0,10);
-      } else if (typeof ts === "number") {
-        const d = new Date(ts * 1000);
-        firstTxDate = isNaN(d.getTime()) ? null : d.toISOString().slice(0,10);
-      }
-    } catch {
-      // ok — we'll fall back below if needed
-    }
-
-    return { txCount, firstTxDate, explorerAddressUrl, error: null };
-  } catch {
-    // Fallback: Blockscout legacy API for first tx date only
-    try {
-      const legacy = await fetchJson(`${apiBase.replace(/\/$/,"")}/api?module=account&action=txlist&address=${address}&page=1&offset=1&sort=asc`, signal);
-      const first = Array.isArray(legacy?.result) ? legacy.result[0] : null;
-      const ts = first?.timeStamp;
-      const firstTxDate =
-        typeof ts === "string" ? new Date(Number(ts) * 1000).toISOString().slice(0,10) :
-        null;
-      return { txCount: null, firstTxDate, explorerAddressUrl, error: null };
-    } catch (err) {
-      return { txCount: null, firstTxDate: null, explorerAddressUrl, error: err instanceof Error ? err.message : "Fetch failed" };
-    }
-  }
+  const json = await res.json();
+  return (json?.data ?? {}) as Record<string, ExplorerStats>;
 }
 
 function TickerBar() {
@@ -291,33 +248,16 @@ export default function DeFiDashboard() {
       return;
     }
     const controller = new AbortController();
-    const CHAINS_FOR_EXPLORER: Array<{ key: string; label: string; apiBase: string; explorerBase: string }> = [
-      { key: "gravityMainnet",   label: "Gravity",   apiBase: "https://explorer.gravity.xyz",                     explorerBase: "https://explorer.gravity.xyz" },
-      { key: "tempoTestnet",     label: "Tempo",     apiBase: "https://scout.tempo.xyz",                         explorerBase: "https://scout.tempo.xyz" },
-      { key: "arcTestnet",       label: "Arc",       apiBase: "https://testnet.arcscan.app",                     explorerBase: "https://testnet.arcscan.app" },
-      { key: "giwaTestnet",      label: "GIWA",      apiBase: "https://sepolia-explorer.giwa.io",                explorerBase: "https://sepolia-explorer.giwa.io" },
-      { key: "robinhoodTestnet", label: "Robinhood", apiBase: "https://explorer.testnet.chain.robinhood.com",    explorerBase: "https://explorer.testnet.chain.robinhood.com" },
-    ];
     setExplorerLoading(true);
-    Promise.allSettled(
-      CHAINS_FOR_EXPLORER.map(async (c) => {
-        const stats = await getBlockscoutStats(c.apiBase, c.explorerBase, address, controller.signal);
-        return [c.key, stats] as const;
+    fetchExplorerStats(address, controller.signal)
+      .then((data) => {
+        if (controller.signal.aborted) return;
+        setExplorerStats(data);
+        setExplorerLoading(false);
       })
-    ).then((results) => {
-      if (controller.signal.aborted) return;
-      const next: Record<string, ExplorerStats> = {};
-      results.forEach((r) => {
-        if (r.status === "fulfilled") {
-          const [k, v] = r.value;
-          next[k] = v;
-        }
+      .catch(() => {
+        if (!controller.signal.aborted) setExplorerLoading(false);
       });
-      setExplorerStats(next);
-      setExplorerLoading(false);
-    }).catch(() => {
-      if (!controller.signal.aborted) setExplorerLoading(false);
-    });
     return () => controller.abort();
   }, [connected, address]);
 
