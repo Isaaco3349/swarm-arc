@@ -34,7 +34,8 @@ const generateMockPositions = () => [
 
 const TICKER_PRICES: Record<string, number> = { G: 0.42, ETH: 3240, USDC: 1, USD: 1, pathUSD: 1, AlphaUSD: 1, WETH: 3240, ARB: 0.89 };
 const fmt     = (n: number | null, d = 2) => n == null ? "—" : n.toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
-const fmtUSD  = (n: number | null) => n == null ? "—" : `$${Math.abs(n).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const USD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtUSD  = (n: number | null) => n == null ? "—" : USD.format(n);
 const shortAddr = (a: string) => `${a.slice(0,6)}...${a.slice(-4)}`;
 const priceOf   = (sym: string) => TICKER_PRICES[sym] ?? 1;
 
@@ -295,7 +296,7 @@ export default function DeFiDashboard() {
         <div style={{padding:"20px 24px"}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:1,marginBottom:20,border:"1px solid #1a2a1a",background:"#1a2a1a"}}>
             <StatCard label="TOTAL DEPOSITED" value={fmtUSD(totalDeposited)} sub={`${positions.filter(p=>p.deposited>0).length} active positions`} accent="#00ff88"/>
-            <StatCard label="NATIVE BALANCE"  value={`$${nativeUSD.toFixed(2)}`} sub="live on-chain reads" accent="#00ffcc"/>
+            <StatCard label="NATIVE BALANCE"  value={fmtUSD(nativeUSD)} sub="live on-chain reads" accent="#00ffcc"/>
             <StatCard label="TOTAL EARNED"    value={`+${fmtUSD(totalEarned)}`} sub="unrealized yield" accent="#00cc66"/>
             <StatCard label="AVG APY"         value={`${fmt(avgAPY)}%`} sub="weighted average" accent="#f59e0b" blink={true}/>
           </div>
