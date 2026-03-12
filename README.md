@@ -1,20 +1,17 @@
-﻿Commit 1 line
-Commit 2 line
-Commit 3 line
-Commit 4 line
-Commit 5 line
-Commit 6 line
-Commit 7 line
-Commit 8 line
-Commit 9 line
-Commit 10 line
-Commit 11 line
-Commit 12 line
-Commit 13 line
-Commit 14 line
-Commit 15 line
-Commit 16 line
-Commit 17 line
-Commit 18 line
-Commit 19 line
-Commit 20 line
+# DeFi Tracker 2
+
+A DeFi portfolio tracker built with Next.js and TypeScript that lets you monitor your wallet balances across multiple chains.
+
+## Tech Stack
+- Next.js 14
+- TypeScript
+- CSS Modules
+
+## Live Demo
+[defi-tracker-2.vercel.app](https://defi-tracker-2.vercel.app)
+
+## Getting Started
+```bash
+npm install
+npm run dev
+```
