@@ -1,294 +1,154 @@
-// app/page.tsx
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { setCookie, getCookie } from "cookies-next";
-import { SocialLoginProvider } from "@circle-fin/w3s-pw-web-sdk/dist/src/types";
-import type { W3SSdk } from "@circle-fin/w3s-pw-web-sdk";
+import { useState } from "react";
 
-const appId = process.env.NEXT_PUBLIC_CIRCLE_APP_ID as string;
-const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID as string;
-
-type LoginResult = {
-  userToken: string;
-  encryptionKey: string;
+type Task = {
+  id: string;
+  description: string;
+  assignedTo: string;
+  status: string;
+  payment: number;
+  result?: string;
 };
 
-type Wallet = {
-  id: string;
-  address: string;
-  blockchain: string;
-  [key: string]: unknown;
+type MissionResult = {
+  mission: string;
+  tasks: Task[];
+  totalSpent: number;
+  transactions: string[];
 };
 
 export default function HomePage() {
-  const sdkRef = useRef<W3SSdk | null>(null);
-  const [sdkReady, setSdkReady] = useState(false);
-  const [deviceId, setDeviceId] = useState<string>("");
-  const [deviceIdLoading, setDeviceIdLoading] = useState(false);
-  const [deviceToken, setDeviceToken] = useState<string>("");
-  const [deviceEncryptionKey, setDeviceEncryptionKey] = useState<string>("");
-  const [loginResult, setLoginResult] = useState<LoginResult | null>(null);
-  const [loginError, setLoginError] = useState<string | null>(null);
-  const [challengeId, setChallengeId] = useState<string | null>(null);
-  const [wallets, setWallets] = useState<Wallet[]>([]);
-  const [usdcBalance, setUsdcBalance] = useState<string | null>(null);
-  const [status, setStatus] = useState<string>("Ready");
+  const [mission, setMission] = useState("");
+  const [walletAddress, setWalletAddress] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<MissionResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [txCount, setTxCount] = useState(0);
 
-  useEffect(() => {
-    let cancelled = false;
-    const initSdk = async () => {
-      try {
-        const { W3SSdk } = await import("@circle-fin/w3s-pw-web-sdk");
-        const onLoginComplete = (error: unknown, result: any) => {
-          if (cancelled) return;
-          if (error) {
-            const err = error as any;
-            setLoginError(err.message || "Login failed");
-            setLoginResult(null);
-            setStatus("Login failed");
-            return;
-          }
-          setLoginResult({
-            userToken: result.userToken,
-            encryptionKey: result.encryptionKey,
-          });
-          setLoginError(null);
-          setStatus("Login successful. Credentials received from Google.");
-        };
-
-        const restoredAppId = (getCookie("appId") as string) || appId || "";
-        const restoredGoogleClientId = (getCookie("google.clientId") as string) || googleClientId || "";
-        const restoredDeviceToken = (getCookie("deviceToken") as string) || "";
-        const restoredDeviceEncryptionKey = (getCookie("deviceEncryptionKey") as string) || "";
-
-        const sdk = new W3SSdk(
-          {
-            appSettings: { appId: restoredAppId },
-            loginConfigs: {
-              deviceToken: restoredDeviceToken,
-              deviceEncryptionKey: restoredDeviceEncryptionKey,
-              google: {
-                clientId: restoredGoogleClientId,
-                redirectUri: typeof window !== "undefined" ? window.location.origin : "",
-                selectAccountPrompt: true,
-              },
-            },
-          },
-          onLoginComplete
-        );
-        sdkRef.current = sdk;
-        if (!cancelled) {
-          setSdkReady(true);
-          setStatus("SDK initialized. Ready to create device token.");
-        }
-      } catch (err) {
-        if (!cancelled) setStatus("Failed to initialize Web SDK");
-      }
-    };
-    void initSdk();
-    return () => { cancelled = true; };
-  }, []);
-
-  useEffect(() => {
-    const fetchDeviceId = async () => {
-      if (!sdkRef.current) return;
-      try {
-        const cached = typeof window !== "undefined" ? window.localStorage.getItem("deviceId") : null;
-        if (cached) { setDeviceId(cached); return; }
-        setDeviceIdLoading(true);
-        const id = await sdkRef.current.getDeviceId();
-        setDeviceId(id);
-        if (typeof window !== "undefined") window.localStorage.setItem("deviceId", id);
-      } catch {
-        setStatus("Failed to get deviceId");
-      } finally {
-        setDeviceIdLoading(false);
-      }
-    };
-    if (sdkReady) void fetchDeviceId();
-  }, [sdkReady]);
-
-  async function loadUsdcBalance(userToken: string, walletId: string) {
-    try {
-      const response = await fetch("/api/endpoints", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "getTokenBalance", userToken, walletId }),
-      });
-      const data = await response.json();
-      if (!response.ok) { setStatus("Failed to load USDC balance"); return null; }
-      const balances = (data.tokenBalances as any[]) || [];
-      const usdcEntry = balances.find((t) => {
-        const symbol = t.token?.symbol || "";
-        const name = t.token?.name || "";
-        return symbol.startsWith("USDC") || name.includes("USDC");
-      }) ?? null;
-      const amount = usdcEntry?.amount ?? "0";
-      setUsdcBalance(amount);
-      return amount;
-    } catch {
-      setStatus("Failed to load USDC balance");
-      return null;
+  const runMission = async () => {
+    if (!mission || !walletAddress) {
+      setError("Please enter a mission and your wallet address");
+      return;
     }
-  }
+    setLoading(true);
+    setError(null);
+    setResult(null);
 
-  const loadWallets = async (userToken: string, options?: { source?: "afterCreate" | "alreadyInitialized" }) => {
     try {
-      setStatus("Loading wallet details...");
-      setUsdcBalance(null);
-      const response = await fetch("/api/endpoints", {
+      const response = await fetch("/api/swarm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "listWallets", userToken }),
+        body: JSON.stringify({
+          mission,
+          orchestratorWallet: walletAddress,
+        }),
       });
-      const data = await response.json();
-      if (!response.ok) { setStatus("Failed to load wallet details"); return; }
-      const wallets = (data.wallets as Wallet[]) || [];
-      setWallets(wallets);
-      if (wallets.length > 0) {
-        await loadUsdcBalance(userToken, wallets[0].id);
-        if (options?.source === "afterCreate") setStatus("Wallet created successfully! Wallet details and USDC balance loaded.");
-        else if (options?.source === "alreadyInitialized") setStatus("User already initialized. Wallet details and USDC balance loaded.");
-        else setStatus("Wallet details and USDC balance loaded.");
-      } else {
-        setStatus("No wallets found for this user.");
-      }
-    } catch {
-      setStatus("Failed to load wallet details");
-    }
-  };
 
-  const handleCreateDeviceToken = async () => {
-    if (!deviceId) { setStatus("Missing deviceId"); return; }
-    try {
-      setStatus("Creating device token...");
-      const response = await fetch("/api/endpoints", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "createDeviceToken", deviceId }),
-      });
       const data = await response.json();
-      if (!response.ok) { setStatus("Failed to create device token"); return; }
-      setDeviceToken(data.deviceToken);
-      setDeviceEncryptionKey(data.deviceEncryptionKey);
-      setCookie("deviceToken", data.deviceToken);
-      setCookie("deviceEncryptionKey", data.deviceEncryptionKey);
-      setStatus("Device token created");
-    } catch {
-      setStatus("Failed to create device token");
-    }
-  };
-
-  const handleLoginWithGoogle = () => {
-    const sdk = sdkRef.current;
-    if (!sdk) { setStatus("SDK not ready"); return; }
-    if (!deviceToken || !deviceEncryptionKey) { setStatus("Missing deviceToken or deviceEncryptionKey"); return; }
-    setCookie("appId", appId);
-    setCookie("google.clientId", googleClientId);
-    setCookie("deviceToken", deviceToken);
-    setCookie("deviceEncryptionKey", deviceEncryptionKey);
-    sdk.updateConfigs({
-      appSettings: { appId },
-      loginConfigs: {
-        deviceToken,
-        deviceEncryptionKey,
-        google: {
-          clientId: googleClientId,
-          redirectUri: window.location.origin,
-          selectAccountPrompt: true,
-        },
-      },
-    });
-    setStatus("Redirecting to Google...");
-    sdk.performLogin(SocialLoginProvider.GOOGLE);
-  };
-
-  const handleInitializeUser = async () => {
-    if (!loginResult?.userToken) { setStatus("Missing userToken. Please login with Google first."); return; }
-    try {
-      setStatus("Initializing user...");
-      const response = await fetch("/api/endpoints", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "initializeUser", userToken: loginResult.userToken }),
-      });
-      const data = await response.json();
-      if (!response.ok) {
-        if (data.code === 155106) {
-          await loadWallets(loginResult.userToken, { source: "alreadyInitialized" });
-          setChallengeId(null);
-          return;
-        }
-        setStatus("Failed to initialize user: " + (data.error || data.message));
-        return;
-      }
-      setChallengeId(data.challengeId);
-      setStatus(`User initialized. challengeId: ${data.challengeId}`);
+      if (!response.ok) throw new Error(data.error);
+      setResult(data);
+      setTxCount((prev) => prev + data.transactions.length);
     } catch (err: any) {
-      if (err?.code === 155106 && loginResult?.userToken) {
-        await loadWallets(loginResult.userToken, { source: "alreadyInitialized" });
-        setChallengeId(null);
-        return;
-      }
-      setStatus("Failed to initialize user: " + (err?.message || "Unknown error"));
+      setError(err.message || "Mission failed");
+    } finally {
+      setLoading(false);
     }
   };
-
-  const handleExecuteChallenge = () => {
-    const sdk = sdkRef.current;
-    if (!sdk) { setStatus("SDK not ready"); return; }
-    if (!challengeId) { setStatus("Missing challengeId. Initialize user first."); return; }
-    if (!loginResult?.userToken || !loginResult?.encryptionKey) { setStatus("Missing login credentials."); return; }
-    sdk.setAuthentication({ userToken: loginResult.userToken, encryptionKey: loginResult.encryptionKey });
-    setStatus("Executing challenge...");
-    sdk.execute(challengeId, (error) => {
-      const err = (error || {}) as any;
-      if (error) { setStatus("Failed to execute challenge: " + (err?.message ?? "Unknown error")); return; }
-      setStatus("Challenge executed. Loading wallet details...");
-      void (async () => {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        setChallengeId(null);
-        await loadWallets(loginResult.userToken, { source: "afterCreate" });
-      })();
-    });
-  };
-
-  const primaryWallet = wallets[0];
 
   return (
-    <main>
-      <div style={{ width: "50%", margin: "0 auto" }}>
-        <h1>Swarm — Agent Wallet Setup</h1>
-        <p>Follow the steps below to create your Arc testnet wallet:</p>
-        <div>
-          <button onClick={handleCreateDeviceToken} style={{ margin: "6px" }} disabled={!sdkReady || !deviceId || deviceIdLoading}>
-            1. Create device token
-          </button>
-          <br />
-          <button onClick={handleLoginWithGoogle} style={{ margin: "6px" }} disabled={!deviceToken || !deviceEncryptionKey}>
-            2. Login with Google
-          </button>
-          <br />
-          <button onClick={handleInitializeUser} style={{ margin: "6px" }} disabled={!loginResult || wallets.length > 0}>
-            3. Initialize user (get challenge)
-          </button>
-          <br />
-          <button onClick={handleExecuteChallenge} style={{ margin: "6px" }} disabled={!challengeId || wallets.length > 0}>
-            4. Create wallet (execute challenge)
-          </button>
-        </div>
-        <p><strong>Status:</strong> {status}</p>
-        {loginError && <p style={{ color: "red" }}><strong>Error:</strong> {loginError}</p>}
-        {primaryWallet && (
-          <div style={{ marginTop: "12px" }}>
-            <h2>Wallet details</h2>
-            <p><strong>Address:</strong> {primaryWallet.address}</p>
-            <p><strong>Blockchain:</strong> {primaryWallet.blockchain}</p>
-            {usdcBalance !== null && <p><strong>USDC balance:</strong> {usdcBalance}</p>}
-          </div>
-        )}
+    <main style={{ fontFamily: "monospace", padding: "40px", maxWidth: "800px", margin: "0 auto" }}>
+      <h1 style={{ fontSize: "28px", marginBottom: "4px" }}>⬡ Swarm</h1>
+      <p style={{ color: "#666", marginBottom: "32px" }}>
+        Autonomous agent commerce on Arc — powered by Circle Nanopayments + Gemini
+      </p>
+
+      <div style={{ marginBottom: "16px" }}>
+        <label style={{ display: "block", marginBottom: "6px", fontWeight: "bold" }}>
+          Your Arc Wallet Address
+        </label>
+        <input
+          type="text"
+          placeholder="0x..."
+          value={walletAddress}
+          onChange={(e) => setWalletAddress(e.target.value)}
+          style={{ width: "100%", padding: "10px", fontSize: "14px", borderRadius: "6px", border: "1px solid #ccc" }}
+        />
       </div>
+
+      <div style={{ marginBottom: "16px" }}>
+        <label style={{ display: "block", marginBottom: "6px", fontWeight: "bold" }}>
+          Mission
+        </label>
+        <textarea
+          placeholder="e.g. Research the latest developments in DeFi and summarise key trends"
+          value={mission}
+          onChange={(e) => setMission(e.target.value)}
+          rows={3}
+          style={{ width: "100%", padding: "10px", fontSize: "14px", borderRadius: "6px", border: "1px solid #ccc" }}
+        />
+      </div>
+
+      <button
+        onClick={runMission}
+        disabled={loading}
+        style={{
+          background: loading ? "#999" : "#0052ff",
+          color: "#fff",
+          padding: "12px 28px",
+          fontSize: "16px",
+          border: "none",
+          borderRadius: "8px",
+          cursor: loading ? "not-allowed" : "pointer",
+          marginBottom: "32px",
+        }}
+      >
+        {loading ? "⏳ Running mission..." : "🚀 Launch Swarm Mission"}
+      </button>
+
+      <div style={{ marginBottom: "24px", padding: "16px", background: "#f0f4ff", borderRadius: "8px" }}>
+        <strong>Total on-chain transactions:</strong> {txCount} / 50 required
+        <div style={{ background: "#ddd", borderRadius: "4px", height: "8px", marginTop: "8px" }}>
+          <div style={{ background: "#0052ff", width: `${Math.min((txCount / 50) * 100, 100)}%`, height: "8px", borderRadius: "4px", transition: "width 0.5s" }} />
+        </div>
+      </div>
+
+      {error && (
+        <div style={{ background: "#fff0f0", border: "1px solid #ffcccc", padding: "16px", borderRadius: "8px", marginBottom: "24px", color: "red" }}>
+          ❌ {error}
+        </div>
+      )}
+
+      {result && (
+        <div>
+          <h2 style={{ marginBottom: "16px" }}>✅ Mission Complete</h2>
+          <p><strong>Mission:</strong> {result.mission}</p>
+          <p><strong>Total spent:</strong> ${result.totalSpent.toFixed(4)} USDC</p>
+          <p><strong>Transactions:</strong> {result.transactions.length}</p>
+
+          <h3 style={{ marginTop: "24px", marginBottom: "12px" }}>Agent Tasks</h3>
+          {result.tasks.map((task, i) => (
+            <div key={i} style={{ background: "#f9f9f9", border: "1px solid #eee", borderRadius: "8px", padding: "16px", marginBottom: "12px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "8px" }}>
+                <strong>🤖 {task.assignedTo}</strong>
+                <span style={{ background: "#e6ffe6", padding: "2px 10px", borderRadius: "12px", fontSize: "12px" }}>
+                  ✅ {task.status}
+                </span>
+              </div>
+              <p style={{ color: "#555", fontSize: "13px", marginBottom: "8px" }}><strong>Task:</strong> {task.description}</p>
+              <p style={{ fontSize: "13px", marginBottom: "8px" }}><strong>Result:</strong> {task.result}</p>
+              <p style={{ fontSize: "12px", color: "#888" }}>💰 Paid: ${task.payment} USDC</p>
+            </div>
+          ))}
+
+          <h3 style={{ marginTop: "24px", marginBottom: "12px" }}>Transaction Hashes</h3>
+          {result.transactions.map((tx, i) => (
+            <div key={i} style={{ fontSize: "12px", color: "#444", background: "#f0f0f0", padding: "8px", borderRadius: "4px", marginBottom: "6px", wordBreak: "break-all" }}>
+              {i + 1}. {tx}
+            </div>
+          ))}
+        </div>
+      )}
     </main>
   );
 }
