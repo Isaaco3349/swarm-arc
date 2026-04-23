@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 type Task = {
   id: string;
@@ -20,12 +20,15 @@ type MissionResult = {
 
 export default function HomePage() {
   const [mission, setMission] = useState("");
-  const [walletAddress, setWalletAddress] = useState("");
+  const [walletAddress, setWalletAddress] = useState("0xbe68d59ec0836266ef1f9ec7d3d988be59bebda4");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<MissionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [txCount, setTxCount] = useState(0);
-
+  useEffect(() => {
+  const saved = localStorage.getItem("txCount");
+  if (saved) setTxCount(parseInt(saved));
+  }, []);
   const runMission = async () => {
     if (!mission || !walletAddress) {
       setError("Please enter a mission and your wallet address");
@@ -48,7 +51,11 @@ export default function HomePage() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.error);
       setResult(data);
-      setTxCount((prev) => prev + data.transactions.length);
+      setTxCount((prev) => {
+        const newCount = prev + data.transactions.length;
+        localStorage.setItem("txCount", newCount.toString());
+        return newCount;
+      });
     } catch (err: any) {
       setError(err.message || "Mission failed");
     } finally {
