@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { getEligibleProviders, recordTaskOutcome } from "./reputation";
 
 const client = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -67,10 +68,25 @@ export async function runOrchestrator(
   workerWallets: { name: string; address: string }[]
 ): Promise<MissionResult> {
 
+  // Filter down to only bonded/eligible workers before planning.
+  // Falls back to all workers if reputation data isn't set up yet (e.g. local dev).
+  let eligibleWorkers = workerWallets;
+  try {
+    const eligible = await getEligibleProviders("general", 0.01);
+    if (eligible.length > 0) {
+      eligibleWorkers = workerWallets.filter((w) =>
+        eligible.some((e) => e.walletAddress === w.address)
+      );
+      if (eligibleWorkers.length === 0) eligibleWorkers = workerWallets; // fallback
+    }
+  } catch {
+    // reputation system not wired up yet — proceed with all workers
+  }
+
   const planPrompt = `You are an AI orchestrator managing a team of worker agents.
 Break this mission into exactly 3 subtasks, one for each worker.
 Mission: "${mission}"
-Workers: ${workerWallets.map((w) => w.name).join(", ")}
+Workers: ${eligibleWorkers.map((w) => w.name).join(", ")}
 
 Respond in this exact JSON format only, no markdown, no backticks:
 {"subtasks":[{"worker":"Scraper","task":"task description","payment":0.001},{"worker":"Summariser","task":"task description","payment":0.001},{"worker":"Validator","task":"task description","payment":0.001}]}`;
@@ -90,7 +106,7 @@ Respond in this exact JSON format only, no markdown, no backticks:
     if (!plan?.subtasks) throw new Error("Invalid plan");
   } catch {
     plan = {
-      subtasks: workerWallets.map((w) => ({
+      subtasks: eligibleWorkers.map((w) => ({
         worker: w.name,
         task: `Handle part of: ${mission}`,
         payment: 0.001,
@@ -104,7 +120,7 @@ Respond in this exact JSON format only, no markdown, no backticks:
 
   for (const subtask of plan.subtasks) {
     const worker =
-      workerWallets.find((w) => w.name === subtask.worker) || workerWallets[0];
+      eligibleWorkers.find((w) => w.name === subtask.worker) || eligibleWorkers[0];
 
     const workerPrompt = `You are a worker AI agent named ${worker.name}. Complete this task in 2-3 sentences: "${subtask.task}"`;
 
@@ -139,6 +155,12 @@ Respond in this exact JSON format only, no markdown, no backticks:
     console.log(
       `✅ ${worker.name} completed | $${subtask.payment} USDC | TX: ${txId}`
     );
+
+    try {
+      await recordTaskOutcome(subtask.task, worker.address, true, 0);
+    } catch {
+      // reputation system not wired up yet
+    }
   }
 
   return { mission, tasks, totalSpent, transactions };
