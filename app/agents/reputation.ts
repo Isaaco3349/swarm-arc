@@ -5,7 +5,13 @@
  * that trigger settlement or slashing on Arc.
  */
 
-import type { ProviderMatch } from "./orchestrator";
+export interface ProviderMatch {
+  agentId: string;
+  walletAddress: string;
+  priceUsdc: number;
+  reputationScore: number;
+  bondedAmountUsdc: number;
+}
 
 interface ProviderRecord extends ProviderMatch {
   capability: string;
