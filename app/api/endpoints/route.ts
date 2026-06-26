@@ -1,5 +1,6 @@
 // app/api/endpoints/route.ts
 import { NextResponse } from "next/server";
+import { sendUSDCPaymentWithMemo } from "@/app/agents/payment";
 
 const CIRCLE_BASE_URL =
   process.env.NEXT_PUBLIC_CIRCLE_BASE_URL ?? "https://api.circle.com";
@@ -131,6 +132,23 @@ export async function POST(request: Request) {
           return NextResponse.json(data, { status: response.status });
         }
         return NextResponse.json(data.data, { status: 200 });
+      }
+
+      case "pay": {
+        const { toAddress, amountUsdc, taskId } = params;
+        if (!toAddress || !amountUsdc || !taskId) {
+          return NextResponse.json(
+            { error: "Missing toAddress, amountUsdc, or taskId" },
+            { status: 400 },
+          );
+        }
+
+        const result = await sendUSDCPaymentWithMemo(
+          toAddress,
+          amountUsdc,
+          taskId,
+        );
+        return NextResponse.json(result, { status: 200 });
       }
 
       default:
