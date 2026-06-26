@@ -9,6 +9,8 @@ type Task = {
   status: string;
   payment: number;
   result?: string;
+  txId?: string;
+  simulated?: boolean;
 };
 
 type MissionResult = {
@@ -114,10 +116,10 @@ export default function HomePage() {
       </button>
 
       <div style={{ marginBottom: "24px", padding: "16px", background: "#f0f4ff", borderRadius: "8px" }}>
-        <strong>Total on-chain transactions:</strong> {txCount} / 50 required
-        <div style={{ background: "#ddd", borderRadius: "4px", height: "8px", marginTop: "8px" }}>
-          <div style={{ background: "#0052ff", width: `${Math.min((txCount / 50) * 100, 100)}%`, height: "8px", borderRadius: "4px", transition: "width 0.5s" }} />
-        </div>
+        <strong>Total on-chain transactions (this browser):</strong> {txCount}
+        <p style={{ fontSize: "11px", color: "#777", marginTop: "4px", marginBottom: 0 }}>
+          Tracked locally per-browser — the real, permanent record lives on Arc testnet itself.
+        </p>
       </div>
 
       {error && (
@@ -144,11 +146,22 @@ export default function HomePage() {
               </div>
               <p style={{ color: "#555", fontSize: "13px", marginBottom: "8px" }}><strong>Task:</strong> {task.description}</p>
               <p style={{ fontSize: "13px", marginBottom: "8px" }}><strong>Result:</strong> {task.result}</p>
-              <p style={{ fontSize: "12px", color: "#888" }}>💰 Paid: ${task.payment} USDC</p>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <p style={{ fontSize: "12px", color: "#888", margin: 0 }}>💰 Paid: ${task.payment} USDC</p>
+                <span style={{
+                  fontSize: "11px",
+                  padding: "2px 8px",
+                  borderRadius: "10px",
+                  background: task.simulated ? "#fff3cd" : "#e6ffe6",
+                  color: task.simulated ? "#8a6d3b" : "#2f7a4f",
+                }}>
+                  {task.simulated ? "⚠️ Simulated" : "✅ On-chain"}
+                </span>
+              </div>
             </div>
           ))}
 
-          <h3 style={{ marginTop: "24px", marginBottom: "12px" }}>Transaction Hashes</h3>
+          <h3 style={{ marginTop: "24px", marginBottom: "12px" }}>Transaction IDs</h3>
           {result.transactions.map((tx, i) => (
             <div key={i} style={{ fontSize: "12px", color: "#444", background: "#f0f0f0", padding: "8px", borderRadius: "4px", marginBottom: "6px", wordBreak: "break-all" }}>
               {i + 1}. {tx}
