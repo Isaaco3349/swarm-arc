@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { getEligibleProviders, recordTaskOutcome } from "./reputation";
+import { sendUSDCPaymentWithMemo } from "./payment";
 
 const client = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -18,6 +19,7 @@ export type Task = {
   payment: number;
   result?: string;
   txId?: string;
+  simulated?: boolean;
 };
 
 export type MissionResult = {
@@ -26,41 +28,6 @@ export type MissionResult = {
   totalSpent: number;
   transactions: string[];
 };
-
-async function sendUSDCPayment(toAddress: string, amount: string): Promise<string> {
-  try {
-    const response = await fetch(
-      "https://api.circle.com/v1/w3s/developer/transactions/transfer",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${process.env.CIRCLE_API_KEY}`,
-        },
-        body: JSON.stringify({
-          idempotencyKey: crypto.randomUUID(),
-          amounts: [amount],
-          destinationAddress: toAddress,
-          feeLevel: "LOW",
-          tokenId: "5797fbd6-3795-519d-84ca-ec4c5f80c3b1",
-          walletId: process.env.CIRCLE_WALLET_ID,
-          blockchain: "ARC-TESTNET",
-        }),
-      }
-    );
-
-    const data = await response.json();
-    console.log("Circle payment response:", JSON.stringify(data));
-
-    if (data?.data?.id) {
-      return data.data.id;
-    }
-    return `sim_${crypto.randomUUID().replace(/-/g, "")}`;
-  } catch (err) {
-    console.error("Payment error:", err);
-    return `sim_${crypto.randomUUID().replace(/-/g, "")}`;
-  }
-}
 
 export async function runOrchestrator(
   mission: string,
@@ -95,7 +62,7 @@ Respond in this exact JSON format only, no markdown, no backticks:
 
   try {
     const planResult = await client.chat.completions.create({
-      model: "openrouter/auto",
+      model: "openrouter/free", // free model router — $0 cost, 50 req/day cap
       messages: [{ role: "user", content: planPrompt }],
       max_tokens: 300,
     });
@@ -125,7 +92,7 @@ Respond in this exact JSON format only, no markdown, no backticks:
     const workerPrompt = `You are a worker AI agent named ${worker.name}. Complete this task in 2-3 sentences: "${subtask.task}"`;
 
     const workerResult = await client.chat.completions.create({
-      model: "openrouter/auto",
+      model: "openrouter/free", // free model router — $0 cost, 50 req/day cap
       messages: [{ role: "user", content: workerPrompt }],
       max_tokens: 200,
     });
@@ -133,27 +100,34 @@ Respond in this exact JSON format only, no markdown, no backticks:
     const workerOutput =
       workerResult.choices[0].message.content?.trim() || "Task completed.";
 
-    // Real on-chain USDC payment via Circle
-    const txId = await sendUSDCPayment(
-      orchestratorWallet,
-      subtask.payment.toFixed(6)
+    // Generate the task id up front so it can be embedded in the on-chain memo.
+    const taskId = crypto.randomUUID();
+
+    // Real on-chain USDC payment via Circle, wrapped with a memo tying it to taskId.
+    // Pays the WORKER who did the task (not the orchestrator) — this is the
+    // core "agents hire & pay each other" mechanic Swarm is built around.
+    const { txId, simulated } = await sendUSDCPaymentWithMemo(
+      worker.address,
+      subtask.payment.toFixed(6),
+      taskId
     );
 
     transactions.push(txId);
     totalSpent += subtask.payment;
 
     tasks.push({
-      id: crypto.randomUUID(),
+      id: taskId,
       description: subtask.task,
       assignedTo: worker.name,
       status: "completed",
       payment: subtask.payment,
       result: workerOutput,
       txId,
+      simulated,
     });
 
     console.log(
-      `✅ ${worker.name} completed | $${subtask.payment} USDC | TX: ${txId}`
+      `✅ ${worker.name} completed | $${subtask.payment} USDC | TX: ${txId}${simulated ? " (simulated)" : ""}`
     );
 
     try {
